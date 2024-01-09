@@ -1,17 +1,15 @@
 from __future__ import unicode_literals
 
 import tempfile
-from builtins import str
 
-from ffmpeg.nodes import FilterNode, InputNode, OutputNode, get_stream_spec_nodes, stream_operator
+from ffmpeg.nodes import FilterNode, InputNode, OutputNode, Stream, get_stream_spec_nodes, stream_operator
 
-from ._run import topo_sort
-from .dag import get_outgoing_edges
+from .dag import KwargReprNode, get_outgoing_edges, topo_sort
 
 _RIGHT_ARROW = '\u2192'
 
 
-def _get_node_color(node):
+def _get_node_color(node: KwargReprNode) -> str | None:
     if isinstance(node, InputNode):
         color = '#99cc00'
     elif isinstance(node, OutputNode):
@@ -24,7 +22,9 @@ def _get_node_color(node):
 
 
 @stream_operator()
-def view(stream_spec, detail=False, filename=None, pipe=False, **kwargs):
+def view(
+    stream_spec: Stream, detail: bool = False, filename: str | None = None, pipe: bool = False, **kwargs: str
+) -> Stream | bytes:
     try:
         import graphviz
     except ImportError:

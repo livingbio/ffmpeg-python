@@ -53,7 +53,7 @@ repos:
         entry: mypy
         language: system
         types: [python]
-        exclude: migrations/|commands/|scripts/|sandbox/|samples|sdk
+        exclude: migrations/|commands/|scripts/|sandbox/|samples|sdk|examples
         args:
           [
             --pretty,
@@ -65,5 +65,6 @@ repos:
             --disallow-any-generics,
             --check-untyped-defs,
             --no-implicit-reexport,
-            --disallow-untyped-defs
+            --disallow-untyped-defs,
+            --install-types,
                       ]

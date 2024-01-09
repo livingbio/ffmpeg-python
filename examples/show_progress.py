@@ -11,11 +11,10 @@ import tempfile
 import textwrap
 
 import gevent
+import gevent.monkey
 from tqdm import tqdm
 
 import ffmpeg
-
-import gevent.monkey
 
 gevent.monkey.patch_all(thread=False)
 
