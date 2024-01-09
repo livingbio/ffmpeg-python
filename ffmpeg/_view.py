@@ -1,18 +1,12 @@
 from __future__ import unicode_literals
 
-from builtins import str
-from .dag import get_outgoing_edges
-from ._run import topo_sort
 import tempfile
+from builtins import str
 
-from ffmpeg.nodes import (
-    FilterNode,
-    get_stream_spec_nodes,
-    InputNode,
-    OutputNode,
-    stream_operator,
-)
+from ffmpeg.nodes import FilterNode, InputNode, OutputNode, get_stream_spec_nodes, stream_operator
 
+from ._run import topo_sort
+from .dag import get_outgoing_edges
 
 _RIGHT_ARROW = '\u2192'
 
@@ -35,8 +29,7 @@ def view(stream_spec, detail=False, filename=None, pipe=False, **kwargs):
         import graphviz
     except ImportError:
         raise ImportError(
-            'failed to import graphviz; please make sure graphviz is installed (e.g. '
-            '`pip install graphviz`)'
+            'failed to import graphviz; please make sure graphviz is installed (e.g. ' '`pip install graphviz`)'
         )
 
     show_labels = kwargs.pop('show_labels', True)
@@ -51,9 +44,7 @@ def view(stream_spec, detail=False, filename=None, pipe=False, **kwargs):
     graph = graphviz.Digraph(format='png')
     graph.attr(rankdir='LR')
     if len(list(kwargs.keys())) != 0:
-        raise ValueError(
-            'Invalid kwargs key(s): {}'.format(', '.join(list(kwargs.keys())))
-        )
+        raise ValueError('Invalid kwargs key(s): {}'.format(', '.join(list(kwargs.keys()))))
 
     for node in sorted_nodes:
         color = _get_node_color(node)
@@ -61,15 +52,11 @@ def view(stream_spec, detail=False, filename=None, pipe=False, **kwargs):
         if detail:
             lines = [node.short_repr]
             lines += ['{!r}'.format(arg) for arg in node.args]
-            lines += [
-                '{}={!r}'.format(key, node.kwargs[key]) for key in sorted(node.kwargs)
-            ]
+            lines += ['{}={!r}'.format(key, node.kwargs[key]) for key in sorted(node.kwargs)]
             node_text = '\n'.join(lines)
         else:
             node_text = node.short_repr
-        graph.node(
-            str(hash(node)), node_text, shape='box', style='filled', fillcolor=color
-        )
+        graph.node(str(hash(node)), node_text, shape='box', style='filled', fillcolor=color)
         outgoing_edge_map = outgoing_edge_maps.get(node, {})
 
         for edge in get_outgoing_edges(node, outgoing_edge_map):
@@ -78,11 +65,7 @@ def view(stream_spec, detail=False, filename=None, pipe=False, **kwargs):
             down_label = edge.downstream_label
             up_selector = edge.upstream_selector
 
-            if show_labels and (
-                up_label is not None
-                or down_label is not None
-                or up_selector is not None
-            ):
+            if show_labels and (up_label is not None or down_label is not None or up_selector is not None):
                 if up_label is None:
                     up_label = ''
                 if up_selector is not None:

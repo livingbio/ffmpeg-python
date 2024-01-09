@@ -1,7 +1,7 @@
 from __future__ import unicode_literals
 
-from .nodes import FilterNode, filter_operator
 from ._utils import escape_chars
+from .nodes import FilterNode, filter_operator
 
 
 @filter_operator()
@@ -23,9 +23,7 @@ def filter_multi_output(stream_spec, filter_name, *args, **kwargs):
         ffmpeg.concat(split0, split1).output('out.mp4').run()
         ```
     """
-    return FilterNode(
-        stream_spec, filter_name, args=args, kwargs=kwargs, max_inputs=None
-    )
+    return FilterNode(stream_spec, filter_name, args=args, kwargs=kwargs, max_inputs=None)
 
 
 @filter_operator()
@@ -197,9 +195,7 @@ def crop(stream, x, y, width, height, **kwargs):
 
     Official documentation: `crop <https://ffmpeg.org/ffmpeg-filters.html#crop>`__
     """
-    return FilterNode(
-        stream, crop.__name__, args=[width, height, x, y], kwargs=kwargs
-    ).stream()
+    return FilterNode(stream, crop.__name__, args=[width, height, x, y], kwargs=kwargs).stream()
 
 
 @filter_operator()
@@ -230,9 +226,7 @@ def drawbox(stream, x, y, width, height, color, thickness=None, **kwargs):
     """
     if thickness:
         kwargs['t'] = thickness
-    return FilterNode(
-        stream, drawbox.__name__, args=[x, y, width, height, color], kwargs=kwargs
-    ).stream()
+    return FilterNode(stream, drawbox.__name__, args=[x, y, width, height, color], kwargs=kwargs).stream()
 
 
 @filter_operator()

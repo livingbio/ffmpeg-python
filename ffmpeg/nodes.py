@@ -1,10 +1,12 @@
 from __future__ import unicode_literals
 
-from past.builtins import basestring
-from .dag import KwargReprNode
-from ._utils import escape_chars, get_hash_int
-from builtins import object
 import os
+from builtins import object
+
+from past.builtins import basestring
+
+from ._utils import escape_chars, get_hash_int
+from .dag import KwargReprNode
 
 
 def _is_of_types(obj, types):
@@ -25,9 +27,7 @@ class Stream(object):
     downstream nodes.
     """
 
-    def __init__(
-        self, upstream_node, upstream_label, node_types, upstream_selector=None
-    ):
+    def __init__(self, upstream_node, upstream_label, node_types, upstream_selector=None):
         if not _is_of_types(upstream_node, node_types):
             raise TypeError(
                 'Expected upstream node to be of one of the following type(s): {}; got {}'.format(
@@ -49,9 +49,7 @@ class Stream(object):
         selector = ''
         if self.selector:
             selector = ':{}'.format(self.selector)
-        out = '{}[{!r}{}] <{}>'.format(
-            node_repr, self.label, selector, self.node.short_hash
-        )
+        out = '{}[{!r}{}] <{}>'.format(node_repr, self.label, selector, self.node.short_hash)
         return out
 
     def __getitem__(self, index):
@@ -155,17 +153,9 @@ class Node(KwargReprNode):
     @classmethod
     def __check_input_len(cls, stream_map, min_inputs, max_inputs):
         if min_inputs is not None and len(stream_map) < min_inputs:
-            raise ValueError(
-                'Expected at least {} input stream(s); got {}'.format(
-                    min_inputs, len(stream_map)
-                )
-            )
+            raise ValueError('Expected at least {} input stream(s); got {}'.format(min_inputs, len(stream_map)))
         elif max_inputs is not None and len(stream_map) > max_inputs:
-            raise ValueError(
-                'Expected at most {} input stream(s); got {}'.format(
-                    max_inputs, len(stream_map)
-                )
-            )
+            raise ValueError('Expected at most {} input stream(s); got {}'.format(max_inputs, len(stream_map)))
 
     @classmethod
     def __check_input_types(cls, stream_map, incoming_stream_types):

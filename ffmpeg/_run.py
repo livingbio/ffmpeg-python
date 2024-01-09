@@ -1,22 +1,15 @@
 from __future__ import unicode_literals
-from .dag import get_outgoing_edges, topo_sort
-from ._utils import basestring, convert_kwargs_to_cmd_line_args
-from builtins import str
-from functools import reduce
+
 import copy
 import operator
 import subprocess
+from builtins import str
+from functools import reduce
 
 from ._ffmpeg import input, output
-from .nodes import (
-    get_stream_spec_nodes,
-    FilterNode,
-    GlobalNode,
-    InputNode,
-    OutputNode,
-    output_operator,
-)
-
+from ._utils import basestring, convert_kwargs_to_cmd_line_args
+from .dag import get_outgoing_edges, topo_sort
+from .nodes import FilterNode, GlobalNode, InputNode, OutputNode, get_stream_spec_nodes, output_operator, OutputStream
 try:
     from collections.abc import Iterable
 except ImportError:
@@ -25,9 +18,7 @@ except ImportError:
 
 class Error(Exception):
     def __init__(self, cmd, stdout, stderr):
-        super(Error, self).__init__(
-            '{} error (see stderr output for detail)'.format(cmd)
-        )
+        super(Error, self).__init__('{} error (see stderr output for detail)'.format(cmd))
         self.stdout = stdout
         self.stderr = stderr
 
@@ -72,15 +63,9 @@ def _format_output_stream_name(stream_name_map, edge):
 def _get_filter_spec(node, outgoing_edge_map, stream_name_map):
     incoming_edges = node.incoming_edges
     outgoing_edges = get_outgoing_edges(node, outgoing_edge_map)
-    inputs = [
-        _format_input_stream_name(stream_name_map, edge) for edge in incoming_edges
-    ]
-    outputs = [
-        _format_output_stream_name(stream_name_map, edge) for edge in outgoing_edges
-    ]
-    filter_spec = '{}{}{}'.format(
-        ''.join(inputs), node._get_filter(outgoing_edges), ''.join(outputs)
-    )
+    inputs = [_format_input_stream_name(stream_name_map, edge) for edge in incoming_edges]
+    outputs = [_format_output_stream_name(stream_name_map, edge) for edge in outgoing_edges]
+    filter_spec = '{}{}{}'.format(''.join(inputs), node._get_filter(outgoing_edges), ''.join(outputs))
     return filter_spec
 
 
@@ -93,9 +78,7 @@ def _allocate_filter_stream_names(filter_nodes, outgoing_edge_maps, stream_name_
                 # TODO: automatically insert `splits` ahead of time via graph transformation.
                 raise ValueError(
                     'Encountered {} with multiple outgoing edges with same upstream '
-                    'label {!r}; a `split` filter is probably required'.format(
-                        upstream_node, upstream_label
-                    )
+                    'label {!r}; a `split` filter is probably required'.format(upstream_node, upstream_label)
                 )
             stream_name_map[upstream_node, upstream_label] = 's{}'.format(stream_count)
             stream_count += 1
@@ -103,10 +86,7 @@ def _allocate_filter_stream_names(filter_nodes, outgoing_edge_maps, stream_name_
 
 def _get_filter_arg(filter_nodes, outgoing_edge_maps, stream_name_map):
     _allocate_filter_stream_names(filter_nodes, outgoing_edge_maps, stream_name_map)
-    filter_specs = [
-        _get_filter_spec(node, outgoing_edge_maps[node], stream_name_map)
-        for node in filter_nodes
-    ]
+    filter_specs = [_get_filter_spec(node, outgoing_edge_maps[node], stream_name_map) for node in filter_nodes]
     return ';'.join(filter_specs)
 
 
@@ -124,9 +104,7 @@ def _get_output_args(node, stream_name_map):
 
     for edge in node.incoming_edges:
         # edge = node.incoming_edges[0]
-        stream_name = _format_input_stream_name(
-            stream_name_map, edge, is_final_arg=True
-        )
+        stream_name = _format_input_stream_name(stream_name_map, edge, is_final_arg=True)
         if stream_name != '0' or len(node.incoming_edges) > 1:
             args += ['-map', stream_name]
 
@@ -149,7 +127,7 @@ def _get_output_args(node, stream_name_map):
 
 
 @output_operator()
-def get_args(stream_spec, overwrite_output=False):
+def get_args(stream_spec: OutputStream, overwrite_output: bool=False) -> list[str]:
     """Build command-line arguments to be passed to ffmpeg."""
     nodes = get_stream_spec_nodes(stream_spec)
     args = []
@@ -164,9 +142,7 @@ def get_args(stream_spec, overwrite_output=False):
     args += reduce(operator.add, [_get_input_args(node) for node in input_nodes])
     if filter_arg:
         args += ['-filter_complex', filter_arg]
-    args += reduce(
-        operator.add, [_get_output_args(node, stream_name_map) for node in output_nodes]
-    )
+    args += reduce(operator.add, [_get_output_args(node, stream_name_map) for node in output_nodes])
     args += reduce(operator.add, [_get_global_args(node) for node in global_nodes], [])
     if overwrite_output:
         args += ['-y']
@@ -174,7 +150,7 @@ def get_args(stream_spec, overwrite_output=False):
 
 
 @output_operator()
-def compile(stream_spec, cmd='ffmpeg', overwrite_output=False):
+def compile(stream_spec: OutputStream, cmd: list[str] | str='ffmpeg', overwrite_output: bool=False) -> list[str]:
     """Build command-line for invoking ffmpeg.
 
     The :meth:`run` function uses this to build the command line
@@ -194,15 +170,15 @@ def compile(stream_spec, cmd='ffmpeg', overwrite_output=False):
 
 @output_operator()
 def run_async(
-    stream_spec,
-    cmd='ffmpeg',
-    pipe_stdin=False,
-    pipe_stdout=False,
-    pipe_stderr=False,
-    quiet=False,
-    overwrite_output=False,
-    cwd=None,
-):
+    stream_spec: OutputStream,
+    cmd: str | list[str]='ffmpeg',
+    pipe_stdin: bool=False,
+    pipe_stdout: bool=False,
+    pipe_stderr: bool=False,
+    quiet: bool=False,
+    overwrite_output: bool=False,
+    cwd:bool=None,
+) -> subprocess.Popen:
     """Asynchronously invoke ffmpeg for the supplied node graph.
 
     Args:
@@ -298,15 +274,15 @@ def run_async(
 
 @output_operator()
 def run(
-    stream_spec,
-    cmd='ffmpeg',
-    capture_stdout=False,
-    capture_stderr=False,
-    input=None,
-    quiet=False,
-    overwrite_output=False,
-    cwd=None,
-):
+    stream_spec: OutputStream,
+    cmd: str | list[str] ='ffmpeg',
+    capture_stdout: bool=False,
+    capture_stderr: bool=False,
+    input: str | None=None,
+    quiet: bool=False,
+    overwrite_output: bool=False,
+    cwd: str | None=None,
+) -> tuple[str, str]:
     """Invoke ffmpeg for the supplied node graph.
 
     Args:

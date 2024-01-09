@@ -1,9 +1,10 @@
 from __future__ import unicode_literals
-from builtins import str
-from past.builtins import basestring
+
 import hashlib
 import sys
+from builtins import str
 
+from past.builtins import basestring
 
 if sys.version_info.major == 2:
     # noinspection PyUnresolvedReferences,PyShadowingBuiltins
@@ -60,10 +61,7 @@ def _recursive_repr(item):
     elif isinstance(item, list):
         result = '[{}]'.format(', '.join([_recursive_repr(x) for x in item]))
     elif isinstance(item, dict):
-        kv_pairs = [
-            '{}: {}'.format(_recursive_repr(k), _recursive_repr(item[k]))
-            for k in sorted(item)
-        ]
+        kv_pairs = ['{}: {}'.format(_recursive_repr(k), _recursive_repr(item[k])) for k in sorted(item)]
         result = '{' + ', '.join(kv_pairs) + '}'
     else:
         result = repr(item)

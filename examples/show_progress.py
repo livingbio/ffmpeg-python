@@ -1,11 +1,8 @@
 #!/usr/bin/env python
-from __future__ import unicode_literals, print_function
-from tqdm import tqdm
+from __future__ import print_function, unicode_literals
+
 import argparse
 import contextlib
-import ffmpeg
-import gevent
-import gevent.monkey; gevent.monkey.patch_all(thread=False)
 import os
 import shutil
 import socket
@@ -13,8 +10,19 @@ import sys
 import tempfile
 import textwrap
 
+import gevent
+from tqdm import tqdm
 
-parser = argparse.ArgumentParser(description=textwrap.dedent('''\
+import ffmpeg
+
+import gevent.monkey
+
+gevent.monkey.patch_all(thread=False)
+
+
+parser = argparse.ArgumentParser(
+    description=textwrap.dedent(
+        '''\
     Process video and report and show progress bar.
 
     This is an example of using the ffmpeg `-progress` option with a
@@ -24,7 +32,9 @@ parser = argparse.ArgumentParser(description=textwrap.dedent('''\
     The video processing simply consists of converting the video to
     sepia colors, but the same pattern can be applied to other use
     cases.
-'''))
+'''
+    )
+)
 
 parser.add_argument('in_filename', help='Input filename')
 parser.add_argument('out_filename', help='Output filename')
@@ -92,18 +102,19 @@ def _watch_progress(handler):
                 raise
 
 
-
 @contextlib.contextmanager
 def show_progress(total_duration):
     """Create a unix-domain socket to watch progress and render tqdm
     progress bar."""
     with tqdm(total=round(total_duration, 2)) as bar:
+
         def handler(key, value):
             if key == 'out_time_ms':
-                time = round(float(value) / 1000000., 2)
+                time = round(float(value) / 1000000.0, 2)
                 bar.update(time - bar.n)
             elif key == 'progress' and value == 'end':
                 bar.update(bar.total - bar.n)
+
         with _watch_progress(handler) as socket_filename:
             yield socket_filename
 
@@ -114,10 +125,10 @@ if __name__ == '__main__':
 
     with show_progress(total_duration) as socket_filename:
         # See https://ffmpeg.org/ffmpeg-filters.html#Examples-44
-        sepia_values = [.393, .769, .189, 0, .349, .686, .168, 0, .272, .534, .131]
+        sepia_values = [0.393, 0.769, 0.189, 0, 0.349, 0.686, 0.168, 0, 0.272, 0.534, 0.131]
         try:
-            (ffmpeg
-                .input(args.in_filename)
+            (
+                ffmpeg.input(args.in_filename)
                 .colorchannelmixer(*sepia_values)
                 .output(args.out_filename)
                 .global_args('-progress', 'unix://{}'.format(socket_filename))
@@ -127,4 +138,3 @@ if __name__ == '__main__':
         except ffmpeg.Error as e:
             print(e.stderr, file=sys.stderr)
             sys.exit(1)
-

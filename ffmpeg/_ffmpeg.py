@@ -1,16 +1,9 @@
 from __future__ import unicode_literals
 
 from past.builtins import basestring
-from ._utils import basestring
 
-from .nodes import (
-    filter_operator,
-    GlobalNode,
-    InputNode,
-    MergeOutputsNode,
-    OutputNode,
-    output_operator,
-)
+from ._utils import basestring
+from .nodes import GlobalNode, InputNode, MergeOutputsNode, OutputNode, filter_operator, output_operator
 
 
 def input(filename, **kwargs):

@@ -1,15 +1,15 @@
 from __future__ import unicode_literals
-from builtins import bytes
-from builtins import range
-from builtins import str
-import ffmpeg
+
 import os
-import pytest
 import random
 import re
 import subprocess
 import sys
+from builtins import bytes, range, str
 
+import pytest
+
+import ffmpeg
 
 try:
     import mock  # python 2
@@ -32,10 +32,7 @@ subprocess.check_call(['ffmpeg', '-version'])
 def test_escape_chars():
     assert ffmpeg._utils.escape_chars('a:b', ':') == r'a\:b'
     assert ffmpeg._utils.escape_chars('a\\:b', ':\\') == 'a\\\\\\:b'
-    assert (
-        ffmpeg._utils.escape_chars('a:b,c[d]e%{}f\'g\'h\\i', '\\\':,[]%')
-        == 'a\\:b\\,c\\[d\\]e\\%{}f\\\'g\\\'h\\\\i'
-    )
+    assert ffmpeg._utils.escape_chars('a:b,c[d]e%{}f\'g\'h\\i', '\\\':,[]%') == 'a\\:b\\,c\\[d\\]e\\%{}f\\\'g\\\'h\\\\i'
     assert ffmpeg._utils.escape_chars(123, ':\\') == '123'
 
 
@@ -86,41 +83,25 @@ def test_node_repr():
     trim3 = ffmpeg.trim(in_file, start_frame=50, end_frame=60)
     concatted = ffmpeg.concat(trim1, trim2, trim3)
     output = ffmpeg.output(concatted, 'dummy2.mp4')
-    assert repr(in_file.node) == 'input(filename={!r}) <{}>'.format(
-        'dummy.mp4', in_file.node.short_hash
-    )
-    assert repr(trim1.node) == 'trim(end_frame=20, start_frame=10) <{}>'.format(
-        trim1.node.short_hash
-    )
-    assert repr(trim2.node) == 'trim(end_frame=40, start_frame=30) <{}>'.format(
-        trim2.node.short_hash
-    )
-    assert repr(trim3.node) == 'trim(end_frame=60, start_frame=50) <{}>'.format(
-        trim3.node.short_hash
-    )
+    assert repr(in_file.node) == 'input(filename={!r}) <{}>'.format('dummy.mp4', in_file.node.short_hash)
+    assert repr(trim1.node) == 'trim(end_frame=20, start_frame=10) <{}>'.format(trim1.node.short_hash)
+    assert repr(trim2.node) == 'trim(end_frame=40, start_frame=30) <{}>'.format(trim2.node.short_hash)
+    assert repr(trim3.node) == 'trim(end_frame=60, start_frame=50) <{}>'.format(trim3.node.short_hash)
     assert repr(concatted.node) == 'concat(n=3) <{}>'.format(concatted.node.short_hash)
-    assert repr(output.node) == 'output(filename={!r}) <{}>'.format(
-        'dummy2.mp4', output.node.short_hash
-    )
+    assert repr(output.node) == 'output(filename={!r}) <{}>'.format('dummy2.mp4', output.node.short_hash)
 
 
 def test_stream_repr():
     in_file = ffmpeg.input('dummy.mp4')
-    assert repr(in_file) == 'input(filename={!r})[None] <{}>'.format(
-        'dummy.mp4', in_file.node.short_hash
-    )
+    assert repr(in_file) == 'input(filename={!r})[None] <{}>'.format('dummy.mp4', in_file.node.short_hash)
     split0 = in_file.filter_multi_output('split')[0]
     assert repr(split0) == 'split()[0] <{}>'.format(split0.node.short_hash)
     dummy_out = in_file.filter_multi_output('dummy')['out']
-    assert repr(dummy_out) == 'dummy()[{!r}] <{}>'.format(
-        dummy_out.label, dummy_out.node.short_hash
-    )
+    assert repr(dummy_out) == 'dummy()[{!r}] <{}>'.format(dummy_out.label, dummy_out.node.short_hash)
 
 
 def test_repeated_args():
-    out_file = ffmpeg.input('dummy.mp4').output(
-        'dummy2.mp4', streamid=['0:0x101', '1:0x102']
-    )
+    out_file = ffmpeg.input('dummy.mp4').output('dummy2.mp4', streamid=['0:0x101', '1:0x102'])
     assert out_file.get_args() == [
         '-i',
         'dummy.mp4',
@@ -138,11 +119,7 @@ def test__get_args__simple():
 
 
 def test_global_args():
-    out_file = (
-        ffmpeg.input('dummy.mp4')
-        .output('dummy2.mp4')
-        .global_args('-progress', 'someurl')
-    )
+    out_file = ffmpeg.input('dummy.mp4').output('dummy2.mp4').global_args('-progress', 'someurl')
     assert out_file.get_args() == [
         '-i',
         'dummy.mp4',
@@ -330,10 +307,7 @@ def test_filter_concat__wrong_stream_count():
     in2 = ffmpeg.input('in2.mp4')
     with pytest.raises(ValueError) as excinfo:
         ffmpeg.concat(in1.video, in1.audio, in2.hflip(), v=1, a=1).node
-    assert (
-        str(excinfo.value)
-        == 'Expected concat input streams to have length multiple of 2 (v=1, a=1); got 3'
-    )
+    assert str(excinfo.value) == 'Expected concat input streams to have length multiple of 2 (v=1, a=1); got 3'
 
 
 def test_filter_asplit():
@@ -358,11 +332,7 @@ def test_filter_asplit():
 
 
 def test__output__bitrate():
-    args = (
-        ffmpeg.input('in')
-        .output('out', video_bitrate=1000, audio_bitrate=200)
-        .get_args()
-    )
+    args = ffmpeg.input('in').output('out', video_bitrate=1000, audio_bitrate=200).get_args()
     assert args == ['-i', 'in', '-b:v', '1000', '-b:a', '200', 'out']
 
 
@@ -381,12 +351,7 @@ def test_filter_normal_arg_escape():
         """Build a command-line arg using drawtext ``font`` param and extract the
         ``-filter_complex`` arg.
         """
-        args = (
-            ffmpeg.input('in')
-            .drawtext('test', font='a{}b'.format(font))
-            .output('out')
-            .get_args()
-        )
+        args = ffmpeg.input('in').drawtext('test', font='a{}b'.format(font)).output('out').get_args()
         assert args[:3] == ['-i', 'in', '-filter_complex']
         assert args[4:] == ['-map', '[s0]', 'out']
         match = re.match(
@@ -506,9 +471,7 @@ def test__run():
 def test__run__capture_out(mocker, capture_stdout, capture_stderr):
     mocker.patch.object(ffmpeg._run, 'compile', return_value=['echo', 'test'])
     stream = _get_simple_example()
-    out, err = ffmpeg.run(
-        stream, capture_stdout=capture_stdout, capture_stderr=capture_stderr
-    )
+    out, err = ffmpeg.run(stream, capture_stdout=capture_stdout, capture_stderr=capture_stderr)
     if capture_stdout:
         assert out == 'test\n'.encode()
     else:
@@ -533,9 +496,7 @@ def test__run__error(mocker, capture_stdout, capture_stderr):
     mocker.patch.object(ffmpeg._run, 'compile', return_value=['ffmpeg'])
     stream = _get_complex_filter_example()
     with pytest.raises(ffmpeg.Error) as excinfo:
-        out, err = ffmpeg.run(
-            stream, capture_stdout=capture_stdout, capture_stderr=capture_stderr
-        )
+        out, err = ffmpeg.run(stream, capture_stdout=capture_stdout, capture_stderr=capture_stderr)
     assert str(excinfo.value) == 'ffmpeg error (see stderr output for detail)'
     out = excinfo.value.stdout
     err = excinfo.value.stderr
@@ -582,11 +543,7 @@ def test__filter__custom():
 
 
 def test__filter__custom_fluent():
-    stream = (
-        ffmpeg.input('dummy.mp4')
-        .filter('custom_filter', 'a', 'b', kwarg1='c')
-        .output('dummy2.mp4')
-    )
+    stream = ffmpeg.input('dummy.mp4').filter('custom_filter', 'a', 'b', kwarg1='c').output('dummy2.mp4')
     assert stream.get_args() == [
         '-i',
         'dummy.mp4',
@@ -732,9 +689,7 @@ def test_pipe():
         stderr=subprocess.PIPE,
     )
 
-    in_data = bytes(
-        bytearray([random.randint(0, 255) for _ in range(frame_size * frame_count)])
-    )
+    in_data = bytes(bytearray([random.randint(0, 255) for _ in range(frame_size * frame_count)]))
     p.stdin.write(in_data)  # note: this could block, in which case need to use threads
     p.stdin.close()
 
@@ -806,9 +761,7 @@ def test__get_filter_complex_outputs():
 
 
 def test__multi_output_edge_label_order():
-    scale2ref = ffmpeg.filter_multi_output(
-        [ffmpeg.input('x'), ffmpeg.input('y')], 'scale2ref'
-    )
+    scale2ref = ffmpeg.filter_multi_output([ffmpeg.input('x'), ffmpeg.input('y')], 'scale2ref')
     out = ffmpeg.merge_outputs(
         scale2ref[1].filter('scale').output('a'),
         scale2ref[10000].filter('hflip').output('b'),
