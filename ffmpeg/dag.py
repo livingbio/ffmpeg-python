@@ -1,6 +1,6 @@
 from __future__ import annotations, unicode_literals
 
-from collections import namedtuple
+from dataclasses import dataclass
 from typing import Sequence
 
 from ._utils import get_hash, get_hash_int
@@ -71,7 +71,7 @@ class DagNode(object):
         raise NotImplementedError()
 
     @property
-    def incoming_edge_map(self) -> dict[None | int, tuple[KwargReprNode, str, None]]:
+    def incoming_edge_map(self) -> IncomingEdgeMap:
         """Provides information about all incoming edges that connect to this node.
 
         The edge map is a dictionary that maps an ``incoming_label`` to
@@ -81,21 +81,18 @@ class DagNode(object):
         raise NotImplementedError()
 
 
-DagEdge = namedtuple(
-    'DagEdge',
-    [
-        'downstream_node',
-        'downstream_label',
-        'upstream_node',
-        'upstream_label',
-        'upstream_selector',
-    ],
-)
+@dataclass
+class DagEdge:
+    downstream_node: KwargReprNode
+    downstream_label: int | None
+    upstream_node: KwargReprNode
+    upstream_label: int | None
+    upstream_selector: str | None
 
 
 def get_incoming_edges(
     downstream_node: KwargReprNode,
-    incoming_edge_map: dict[None | int, tuple[KwargReprNode, str, None]],
+    incoming_edge_map: IncomingEdgeMap,
 ) -> list[DagEdge]:
     edges = []
     for downstream_label, upstream_info in list(incoming_edge_map.items()):
@@ -112,9 +109,14 @@ def get_incoming_edges(
     return edges
 
 
+OutgoingEdgeMap = dict[None, list[tuple["KwargReprNode", str, None | str]]]
+
+IncomingEdgeMap = dict[int | None, tuple["KwargReprNode", str, str | None]]
+
+
 def get_outgoing_edges(
     upstream_node: KwargReprNode,
-    outgoing_edge_map: dict[None, list[tuple[KwargReprNode, str, None]]],
+    outgoing_edge_map: OutgoingEdgeMap,
 ) -> list[DagEdge]:
     edges = []
     for upstream_label, downstream_infos in sorted(outgoing_edge_map.items()):
@@ -162,7 +164,7 @@ class KwargReprNode(DagNode):
 
     def __init__(
         self,
-        incoming_edge_map: dict[int | None, tuple[KwargReprNode, str, str | None]],
+        incoming_edge_map: IncomingEdgeMap,
         name: str,
         args: Sequence[str | int],
         kwargs: dict[str, str | int | tuple[int, int]],
@@ -199,7 +201,7 @@ class KwargReprNode(DagNode):
         return get_incoming_edges(self, self.incoming_edge_map)
 
     @property
-    def incoming_edge_map(self) -> dict[None | int, tuple[KwargReprNode, str, None]]:
+    def incoming_edge_map(self) -> IncomingEdgeMap:
         return self.__incoming_edge_map
 
     @property
@@ -209,10 +211,10 @@ class KwargReprNode(DagNode):
 
 def topo_sort(
     downstream_nodes: Sequence[KwargReprNode],
-) -> tuple[list[KwargReprNode], dict[KwargReprNode, dict[None, list[tuple[KwargReprNode, str, None]]]]]:
+) -> tuple[list[KwargReprNode], dict[KwargReprNode, OutgoingEdgeMap]]:
     marked_nodes = []
     sorted_nodes: list[KwargReprNode] = []
-    outgoing_edge_maps: dict[KwargReprNode, dict[None, list[tuple[KwargReprNode, str, None]]]] = {}
+    outgoing_edge_maps: dict[KwargReprNode, OutgoingEdgeMap] = {}
 
     def visit(
         upstream_node: KwargReprNode,
@@ -225,9 +227,7 @@ def topo_sort(
             raise RuntimeError('Graph is not a DAG')
 
         if downstream_node is not None:
-            outgoing_edge_map: dict[None, list[tuple[KwargReprNode, str, None]]] = outgoing_edge_maps.get(
-                upstream_node, {}
-            )
+            outgoing_edge_map: OutgoingEdgeMap = outgoing_edge_maps.get(upstream_node, {})
             outgoing_edge_infos: list[tuple[KwargReprNode, str, None]] = outgoing_edge_map.get(upstream_label, [])
             outgoing_edge_infos += [(downstream_node, downstream_label, downstream_selector)]
             outgoing_edge_map[upstream_label] = outgoing_edge_infos

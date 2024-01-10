@@ -8,7 +8,7 @@ from functools import reduce
 
 from ._ffmpeg import input, output
 from ._utils import convert_kwargs_to_cmd_line_args
-from .dag import DagEdge, KwargReprNode, get_outgoing_edges, topo_sort
+from .dag import DagEdge, KwargReprNode, OutgoingEdgeMap, get_outgoing_edges, topo_sort
 from .nodes import FilterNode, GlobalNode, InputNode, OutputNode, OutputStream, get_stream_spec_nodes, output_operator
 
 
@@ -38,9 +38,10 @@ def _get_input_args(input_node: InputNode) -> list[str]:
     return args
 
 
-def _format_input_stream_name(
-    stream_name_map: dict[tuple[KwargReprNode, None], str], edge: DagEdge, is_final_arg: bool = False
-) -> str:
+StreamNameMap = dict[tuple[KwargReprNode, None | int], str]
+
+
+def _format_input_stream_name(stream_name_map: StreamNameMap, edge: DagEdge, is_final_arg: bool = False) -> str:
     prefix = stream_name_map[edge.upstream_node, edge.upstream_label]
     if not edge.upstream_selector:
         suffix = ''
@@ -55,14 +56,14 @@ def _format_input_stream_name(
     return fmt.format(prefix, suffix)
 
 
-def _format_output_stream_name(stream_name_map: dict[tuple[KwargReprNode, None], str], edge: DagEdge) -> str:
+def _format_output_stream_name(stream_name_map: StreamNameMap, edge: DagEdge) -> str:
     return '[{}]'.format(stream_name_map[edge.upstream_node, edge.upstream_label])
 
 
 def _get_filter_spec(
     node: FilterNode,
-    outgoing_edge_map: dict[None, list[tuple[KwargReprNode, str, None]]],
-    stream_name_map: dict[tuple[KwargReprNode, None], str],
+    outgoing_edge_map: OutgoingEdgeMap,
+    stream_name_map: StreamNameMap,
 ) -> str:
     incoming_edges = node.incoming_edges
     outgoing_edges = get_outgoing_edges(node, outgoing_edge_map)
@@ -74,8 +75,8 @@ def _get_filter_spec(
 
 def _allocate_filter_stream_names(
     filter_nodes: list[FilterNode],
-    outgoing_edge_maps: dict[KwargReprNode, dict[None, list[tuple[KwargReprNode, str, None]]]],
-    stream_name_map: dict[tuple[KwargReprNode, None], str],
+    outgoing_edge_maps: dict[KwargReprNode, OutgoingEdgeMap],
+    stream_name_map: StreamNameMap,
 ) -> None:
     stream_count = 0
     for upstream_node in filter_nodes:
@@ -93,8 +94,8 @@ def _allocate_filter_stream_names(
 
 def _get_filter_arg(
     filter_nodes: list[FilterNode],
-    outgoing_edge_maps: dict[KwargReprNode, dict[None, list[tuple[KwargReprNode, str, None]]]],
-    stream_name_map: dict[tuple[KwargReprNode, None], str],
+    outgoing_edge_maps: dict[KwargReprNode, OutgoingEdgeMap],
+    stream_name_map: StreamNameMap,
 ) -> str:
     _allocate_filter_stream_names(filter_nodes, outgoing_edge_maps, stream_name_map)
     filter_specs = [_get_filter_spec(node, outgoing_edge_maps[node], stream_name_map) for node in filter_nodes]
@@ -105,7 +106,7 @@ def _get_global_args(node: GlobalNode) -> list[str | int]:
     return list(node.args)
 
 
-def _get_output_args(node: OutputNode, stream_name_map: dict[tuple[KwargReprNode, None], str]) -> list[str | int]:
+def _get_output_args(node: OutputNode, stream_name_map: StreamNameMap) -> list[str | int]:
     if node.name != output.__name__:
         raise ValueError('Unsupported output node: {}'.format(node))
     args: list[str | int] = []
@@ -151,9 +152,7 @@ def get_args(stream_spec: OutputStream, overwrite_output: bool = False) -> list[
     output_nodes = [node for node in sorted_nodes if isinstance(node, OutputNode)]
     global_nodes = [node for node in sorted_nodes if isinstance(node, GlobalNode)]
     filter_nodes = [node for node in sorted_nodes if isinstance(node, FilterNode)]
-    stream_name_map: dict[tuple[KwargReprNode, None], str] = {
-        (node, None): str(i) for i, node in enumerate(input_nodes)
-    }
+    stream_name_map: StreamNameMap = {(node, None): str(i) for i, node in enumerate(input_nodes)}
     filter_arg = _get_filter_arg(filter_nodes, outgoing_edge_maps, stream_name_map)
     args += reduce(operator.add, [_get_input_args(node) for node in input_nodes])
     if filter_arg:

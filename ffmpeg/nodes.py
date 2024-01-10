@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from typing import Any, Callable, Mapping, Sequence, TypeVar
 
 from ._utils import escape_chars, get_hash_int
-from .dag import DagEdge, KwargReprNode
+from .dag import DagEdge, IncomingEdgeMap, KwargReprNode
 
 
 def _get_types_str(types: Iterable[Any]) -> str:
@@ -117,10 +117,12 @@ class Stream(object):
         return self['v']
 
 
-def get_stream_map(
-    stream_spec: Mapping[int | None, Stream] | Stream | Sequence[Stream] | None
-) -> dict[int | None, Stream]:
-    stream_map: dict[int | None, Stream]
+StreamSpec = Mapping[int | None, Stream] | Stream | Sequence[Stream] | None
+StreamMap = dict[int | None, Stream]
+
+
+def get_stream_map(stream_spec: StreamSpec) -> StreamMap:
+    stream_map: StreamMap
     if stream_spec is None:
         stream_map = {}
     elif isinstance(stream_spec, Stream):
@@ -132,7 +134,7 @@ def get_stream_map(
     return stream_map
 
 
-def get_stream_map_nodes(stream_map: dict[int | None, Stream]) -> list[Node]:
+def get_stream_map_nodes(stream_map: StreamMap) -> list[Node]:
     nodes = []
     for stream in list(stream_map.values()):
         if not isinstance(stream, Stream):
@@ -141,7 +143,7 @@ def get_stream_map_nodes(stream_map: dict[int | None, Stream]) -> list[Node]:
     return nodes
 
 
-def get_stream_spec_nodes(stream_spec: dict[int | None, Stream] | Stream | Sequence[Stream] | None) -> list[Node]:
+def get_stream_spec_nodes(stream_spec: StreamSpec) -> list[Node]:
     stream_map = get_stream_map(stream_spec)
     return get_stream_map_nodes(stream_map)
 
@@ -150,18 +152,14 @@ class Node(KwargReprNode):
     """Node base"""
 
     @classmethod
-    def __check_input_len(
-        cls, stream_map: dict[int | None, Stream], min_inputs: int | None, max_inputs: int | None
-    ) -> None:
+    def __check_input_len(cls, stream_map: StreamMap, min_inputs: int | None, max_inputs: int | None) -> None:
         if min_inputs is not None and len(stream_map) < min_inputs:
             raise ValueError('Expected at least {} input stream(s); got {}'.format(min_inputs, len(stream_map)))
         elif max_inputs is not None and len(stream_map) > max_inputs:
             raise ValueError('Expected at most {} input stream(s); got {}'.format(max_inputs, len(stream_map)))
 
     @classmethod
-    def __check_input_types(
-        cls, stream_map: dict[int | None, Stream], incoming_stream_types: tuple[type, ...] | set[type]
-    ) -> None:
+    def __check_input_types(cls, stream_map: StreamMap, incoming_stream_types: tuple[type, ...] | set[type]) -> None:
         for stream in list(stream_map.values()):
             if not isinstance(stream, tuple(incoming_stream_types)):
                 raise TypeError(
@@ -171,10 +169,8 @@ class Node(KwargReprNode):
                 )
 
     @classmethod
-    def __get_incoming_edge_map(
-        cls, stream_map: dict[int | None, Stream]
-    ) -> dict[int | None, tuple[KwargReprNode, str, str | None]]:
-        incoming_edge_map: dict[int | None, tuple[KwargReprNode, str, str | None]] = {}
+    def __get_incoming_edge_map(cls, stream_map: StreamMap) -> IncomingEdgeMap:
+        incoming_edge_map: IncomingEdgeMap = {}
         for downstream_label, upstream in list(stream_map.items()):
             incoming_edge_map[downstream_label] = (
                 upstream.node,
@@ -185,7 +181,7 @@ class Node(KwargReprNode):
 
     def __init__(
         self,
-        stream_spec: Mapping[int | None, Stream] | Stream | Sequence[Stream] | None,
+        stream_spec: StreamSpec,
         name: str,
         incoming_stream_types: tuple[type, ...] | set[type],
         outgoing_stream_type: type,
