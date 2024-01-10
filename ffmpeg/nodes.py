@@ -18,9 +18,13 @@ class Stream(object):
     """
 
     def __init__(
-        self, upstream_node: Node, upstream_label: str, node_types: Iterable[type], upstream_selector: str | None = None
+        self,
+        upstream_node: Node,
+        upstream_label: str,
+        node_types: Iterable[type],
+        upstream_selector: str | None = None,
     ):
-        if not isinstance(upstream_node, node_types):
+        if not isinstance(upstream_node, tuple(node_types)):
             raise TypeError(
                 'Expected upstream node to be of one of the following type(s): {}; got {}'.format(
                     _get_types_str(node_types), type(upstream_node)
@@ -114,7 +118,7 @@ class Stream(object):
 
 
 def get_stream_map(
-    stream_spec: dict[int | None, Stream] | Stream | list[Stream] | tuple[Stream] | None
+    stream_spec: Mapping[int | None, Stream] | Stream | Sequence[Stream] | None
 ) -> dict[int | None, Stream]:
     stream_map: dict[int | None, Stream]
     if stream_spec is None:
@@ -137,7 +141,7 @@ def get_stream_map_nodes(stream_map: dict[int | None, Stream]) -> list[Node]:
     return nodes
 
 
-def get_stream_spec_nodes(stream_spec: dict[str, Stream] | Stream | list[Stream] | tuple[Stream] | None) -> list[Node]:
+def get_stream_spec_nodes(stream_spec: dict[int | None, Stream] | Stream | Sequence[Stream] | None) -> list[Node]:
     stream_map = get_stream_map(stream_spec)
     return get_stream_map_nodes(stream_map)
 
@@ -155,9 +159,11 @@ class Node(KwargReprNode):
             raise ValueError('Expected at most {} input stream(s); got {}'.format(max_inputs, len(stream_map)))
 
     @classmethod
-    def __check_input_types(cls, stream_map: dict[int | None, Stream], incoming_stream_types: tuple[type]) -> None:
+    def __check_input_types(
+        cls, stream_map: dict[int | None, Stream], incoming_stream_types: tuple[type, ...] | set[type]
+    ) -> None:
         for stream in list(stream_map.values()):
-            if not isinstance(stream, incoming_stream_types):
+            if not isinstance(stream, tuple(incoming_stream_types)):
                 raise TypeError(
                     'Expected incoming stream(s) to be of one of the following types: {}; got {}'.format(
                         _get_types_str(incoming_stream_types), type(stream)
@@ -165,8 +171,10 @@ class Node(KwargReprNode):
                 )
 
     @classmethod
-    def __get_incoming_edge_map(cls, stream_map: dict[int | None, Stream]) -> dict[int | None, tuple[Node, str, None]]:
-        incoming_edge_map = {}
+    def __get_incoming_edge_map(
+        cls, stream_map: dict[int | None, Stream]
+    ) -> dict[int | None, tuple[KwargReprNode, str, str | None]]:
+        incoming_edge_map: dict[int | None, tuple[KwargReprNode, str, str | None]] = {}
         for downstream_label, upstream in list(stream_map.items()):
             incoming_edge_map[downstream_label] = (
                 upstream.node,
@@ -177,14 +185,14 @@ class Node(KwargReprNode):
 
     def __init__(
         self,
-        stream_spec,
+        stream_spec: Mapping[int | None, Stream] | Stream | Sequence[Stream] | None,
         name: str,
-        incoming_stream_types: Iterable[type],
+        incoming_stream_types: tuple[type, ...] | set[type],
         outgoing_stream_type: type,
         min_inputs: int,
         max_inputs: int | None,
         args: Sequence[str | int] = [],
-        kwargs: Mapping[str, str | int | tuple[int, int]] = {},
+        kwargs: dict[str, str | int | tuple[int, int]] = {},
     ):
         stream_map = get_stream_map(stream_spec)
         self.__check_input_len(stream_map, min_inputs, max_inputs)
@@ -233,11 +241,11 @@ class FilterableStream(Stream):
 class InputNode(Node):
     """InputNode type"""
 
-    def __init__(self, name: str, args: list[str] = [], kwargs: dict[str, str] = {}):
+    def __init__(self, name: str, args: list[str] = [], kwargs: dict[str, str | int | tuple[int, int]] = {}):
         super(InputNode, self).__init__(
             stream_spec=None,
             name=name,
-            incoming_stream_types={},
+            incoming_stream_types=set(),
             outgoing_stream_type=FilterableStream,
             min_inputs=0,
             max_inputs=0,
@@ -253,7 +261,12 @@ class InputNode(Node):
 # noinspection PyMethodOverriding
 class FilterNode(Node):
     def __init__(
-        self, stream_spec: Stream, name: str, max_inputs: int = 1, args: list[str] = [], kwargs: dict[str, str] = {}
+        self,
+        stream_spec: Stream,
+        name: str,
+        max_inputs: int = 1,
+        args: list[str] = [],
+        kwargs: dict[str, str | int | tuple[int, int]] = {},
     ):
         super(FilterNode, self).__init__(
             stream_spec=stream_spec,
@@ -338,7 +351,9 @@ class MergeOutputsNode(Node):
 
 # noinspection PyMethodOverriding
 class GlobalNode(Node):
-    def __init__(self, stream: Stream, name: str, args: Iterable[str] = (), kwargs: dict[str, str] = {}):
+    def __init__(
+        self, stream: Stream, name: str, args: Sequence[str] = (), kwargs: dict[str, str | int | tuple[int, int]] = {}
+    ):
         super(GlobalNode, self).__init__(
             stream_spec=stream,
             name=name,

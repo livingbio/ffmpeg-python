@@ -2,7 +2,7 @@ from __future__ import unicode_literals
 
 import hashlib
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, Mapping
 
 
 def _recursive_repr(item: str | list[Any] | dict[str, Any]) -> str:
@@ -44,7 +44,7 @@ def escape_chars(text: str | int | tuple[int, int], chars: str) -> str:
     return text
 
 
-def convert_kwargs_to_cmd_line_args(kwargs: dict[str, Any]) -> list[str]:
+def convert_kwargs_to_cmd_line_args(kwargs: Mapping[str, Any]) -> list[str]:
     """Helper function to build command line arguments out of dict."""
     args = []
     for k in sorted(kwargs.keys()):

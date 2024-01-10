@@ -162,9 +162,9 @@ class KwargReprNode(DagNode):
 
     def __init__(
         self,
-        incoming_edge_map: dict[int | None, tuple[KwargReprNode, str, None]],
+        incoming_edge_map: dict[int | None, tuple[KwargReprNode, str, str | None]],
         name: str,
-        args: list[str | int],
+        args: Sequence[str | int],
         kwargs: dict[str, str | int | tuple[int, int]],
     ):
         self.__incoming_edge_map = incoming_edge_map
