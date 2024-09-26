@@ -224,7 +224,7 @@ process = (
     ffmpeg
     .input("input.mp4")
     .output(
-        server_url, 
+        server_url,
         codec = "copy", # use same codecs of the original video
         listen=1, # enables HTTP server
         f=video_format)

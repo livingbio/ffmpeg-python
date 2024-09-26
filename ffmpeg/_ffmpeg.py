@@ -1,19 +1,21 @@
 from __future__ import unicode_literals
 
-from past.builtins import basestring
-from ._utils import basestring
+from typing import Any
 
 from .nodes import (
-    filter_operator,
+    FilterableStream,
     GlobalNode,
     InputNode,
     MergeOutputsNode,
     OutputNode,
+    OutputStream,
+    Stream,
+    filter_operator,
     output_operator,
 )
 
 
-def input(filename, **kwargs):
+def input(filename: str, **kwargs: Any) -> Stream:
     """Input file URL (ffmpeg ``-i`` option)
 
     Any supplied kwargs are passed to ffmpeg verbatim (e.g. ``t=20``,
@@ -33,13 +35,13 @@ def input(filename, **kwargs):
 
 
 @output_operator()
-def global_args(stream, *args):
+def global_args(stream: OutputStream, *args: str) -> Stream:
     """Add extra global command-line argument(s), e.g. ``-progress``."""
     return GlobalNode(stream, global_args.__name__, args).stream()
 
 
 @output_operator()
-def overwrite_output(stream):
+def overwrite_output(stream: OutputStream) -> Stream:
     """Overwrite output files without asking (ffmpeg ``-y`` option)
 
     Official documentation: `Main options <https://ffmpeg.org/ffmpeg.html#Main-options>`__
@@ -48,13 +50,13 @@ def overwrite_output(stream):
 
 
 @output_operator()
-def merge_outputs(*streams):
+def merge_outputs(*streams: OutputStream) -> Stream:
     """Include all given outputs in one ffmpeg command line"""
     return MergeOutputsNode(streams, merge_outputs.__name__).stream()
 
 
 @filter_operator()
-def output(*streams_and_filename, **kwargs):
+def output(*streams_and_filename_: str | FilterableStream, **kwargs: Any) -> OutputStream:
     """Output file URL
 
     Syntax:
@@ -77,9 +79,9 @@ def output(*streams_and_filename, **kwargs):
 
     Official documentation: `Synopsis <https://ffmpeg.org/ffmpeg.html#Synopsis>`__
     """
-    streams_and_filename = list(streams_and_filename)
+    streams_and_filename = list(streams_and_filename_)
     if 'filename' not in kwargs:
-        if not isinstance(streams_and_filename[-1], basestring):
+        if not isinstance(streams_and_filename[-1], str):
             raise ValueError('A filename must be provided')
         kwargs['filename'] = streams_and_filename.pop(-1)
     streams = streams_and_filename
@@ -89,7 +91,9 @@ def output(*streams_and_filename, **kwargs):
         if 'format' in kwargs:
             raise ValueError("Can't specify both `format` and `f` kwargs")
         kwargs['format'] = fmt
-    return OutputNode(streams, output.__name__, kwargs=kwargs).stream()
+    stream = OutputNode(tuple(k for k in streams if isinstance(k, Stream)), output.__name__, kwargs=kwargs).stream()
+    assert isinstance(stream, OutputStream)
+    return stream
 
 
 __all__ = ['input', 'merge_outputs', 'output', 'overwrite_output']

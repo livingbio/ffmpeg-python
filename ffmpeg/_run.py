@@ -1,47 +1,35 @@
 from __future__ import unicode_literals
-from .dag import get_outgoing_edges, topo_sort
-from ._utils import basestring, convert_kwargs_to_cmd_line_args
-from builtins import str
-from functools import reduce
+
 import copy
 import operator
 import subprocess
+from collections.abc import Iterable
+from functools import reduce
 
 from ._ffmpeg import input, output
-from .nodes import (
-    get_stream_spec_nodes,
-    FilterNode,
-    GlobalNode,
-    InputNode,
-    OutputNode,
-    output_operator,
-)
-
-try:
-    from collections.abc import Iterable
-except ImportError:
-    from collections import Iterable
+from ._utils import convert_kwargs_to_cmd_line_args
+from .dag import DagEdge, KwargReprNode, OutgoingEdgeMap, get_outgoing_edges, topo_sort
+from .nodes import FilterNode, GlobalNode, InputNode, OutputNode, OutputStream, get_stream_spec_nodes, output_operator
 
 
 class Error(Exception):
-    def __init__(self, cmd, stdout, stderr):
-        super(Error, self).__init__(
-            '{} error (see stderr output for detail)'.format(cmd)
-        )
+    def __init__(self, cmd: list[str] | str, stdout: str, stderr: str):
+        super(Error, self).__init__('{} error (see stderr output for detail)'.format(cmd))
         self.stdout = stdout
         self.stderr = stderr
 
 
-def _get_input_args(input_node):
+def _get_input_args(input_node: InputNode) -> list[str]:
     if input_node.name == input.__name__:
         kwargs = copy.copy(input_node.kwargs)
-        filename = kwargs.pop('filename')
+        filename = str(kwargs.pop('filename'))
         fmt = kwargs.pop('format', None)
         video_size = kwargs.pop('video_size', None)
         args = []
         if fmt:
-            args += ['-f', fmt]
+            args += ['-f', str(fmt)]
         if video_size:
+            assert isinstance(video_size, Iterable)
             args += ['-video_size', '{}x{}'.format(video_size[0], video_size[1])]
         args += convert_kwargs_to_cmd_line_args(kwargs)
         args += ['-i', filename]
@@ -50,7 +38,10 @@ def _get_input_args(input_node):
     return args
 
 
-def _format_input_stream_name(stream_name_map, edge, is_final_arg=False):
+StreamNameMap = dict[tuple[KwargReprNode, None | int], str]
+
+
+def _format_input_stream_name(stream_name_map: StreamNameMap, edge: DagEdge, is_final_arg: bool = False) -> str:
     prefix = stream_name_map[edge.upstream_node, edge.upstream_label]
     if not edge.upstream_selector:
         suffix = ''
@@ -65,26 +56,28 @@ def _format_input_stream_name(stream_name_map, edge, is_final_arg=False):
     return fmt.format(prefix, suffix)
 
 
-def _format_output_stream_name(stream_name_map, edge):
+def _format_output_stream_name(stream_name_map: StreamNameMap, edge: DagEdge) -> str:
     return '[{}]'.format(stream_name_map[edge.upstream_node, edge.upstream_label])
 
 
-def _get_filter_spec(node, outgoing_edge_map, stream_name_map):
+def _get_filter_spec(
+    node: FilterNode,
+    outgoing_edge_map: OutgoingEdgeMap,
+    stream_name_map: StreamNameMap,
+) -> str:
     incoming_edges = node.incoming_edges
     outgoing_edges = get_outgoing_edges(node, outgoing_edge_map)
-    inputs = [
-        _format_input_stream_name(stream_name_map, edge) for edge in incoming_edges
-    ]
-    outputs = [
-        _format_output_stream_name(stream_name_map, edge) for edge in outgoing_edges
-    ]
-    filter_spec = '{}{}{}'.format(
-        ''.join(inputs), node._get_filter(outgoing_edges), ''.join(outputs)
-    )
+    inputs = [_format_input_stream_name(stream_name_map, edge) for edge in incoming_edges]
+    outputs = [_format_output_stream_name(stream_name_map, edge) for edge in outgoing_edges]
+    filter_spec = '{}{}{}'.format(''.join(inputs), node._get_filter(outgoing_edges), ''.join(outputs))
     return filter_spec
 
 
-def _allocate_filter_stream_names(filter_nodes, outgoing_edge_maps, stream_name_map):
+def _allocate_filter_stream_names(
+    filter_nodes: list[FilterNode],
+    outgoing_edge_maps: dict[KwargReprNode, OutgoingEdgeMap],
+    stream_name_map: StreamNameMap,
+) -> None:
     stream_count = 0
     for upstream_node in filter_nodes:
         outgoing_edge_map = outgoing_edge_maps[upstream_node]
@@ -93,54 +86,54 @@ def _allocate_filter_stream_names(filter_nodes, outgoing_edge_maps, stream_name_
                 # TODO: automatically insert `splits` ahead of time via graph transformation.
                 raise ValueError(
                     'Encountered {} with multiple outgoing edges with same upstream '
-                    'label {!r}; a `split` filter is probably required'.format(
-                        upstream_node, upstream_label
-                    )
+                    'label {!r}; a `split` filter is probably required'.format(upstream_node, upstream_label)
                 )
             stream_name_map[upstream_node, upstream_label] = 's{}'.format(stream_count)
             stream_count += 1
 
 
-def _get_filter_arg(filter_nodes, outgoing_edge_maps, stream_name_map):
+def _get_filter_arg(
+    filter_nodes: list[FilterNode],
+    outgoing_edge_maps: dict[KwargReprNode, OutgoingEdgeMap],
+    stream_name_map: StreamNameMap,
+) -> str:
     _allocate_filter_stream_names(filter_nodes, outgoing_edge_maps, stream_name_map)
-    filter_specs = [
-        _get_filter_spec(node, outgoing_edge_maps[node], stream_name_map)
-        for node in filter_nodes
-    ]
+    filter_specs = [_get_filter_spec(node, outgoing_edge_maps[node], stream_name_map) for node in filter_nodes]
     return ';'.join(filter_specs)
 
 
-def _get_global_args(node):
+def _get_global_args(node: GlobalNode) -> list[str | int]:
     return list(node.args)
 
 
-def _get_output_args(node, stream_name_map):
+def _get_output_args(node: OutputNode, stream_name_map: StreamNameMap) -> list[str | int]:
     if node.name != output.__name__:
         raise ValueError('Unsupported output node: {}'.format(node))
-    args = []
+    args: list[str | int] = []
 
     if len(node.incoming_edges) == 0:
         raise ValueError('Output node {} has no mapped streams'.format(node))
 
     for edge in node.incoming_edges:
         # edge = node.incoming_edges[0]
-        stream_name = _format_input_stream_name(
-            stream_name_map, edge, is_final_arg=True
-        )
+        stream_name = _format_input_stream_name(stream_name_map, edge, is_final_arg=True)
         if stream_name != '0' or len(node.incoming_edges) > 1:
             args += ['-map', stream_name]
 
     kwargs = copy.copy(node.kwargs)
-    filename = kwargs.pop('filename')
+    filename = str(kwargs.pop('filename'))
     if 'format' in kwargs:
-        args += ['-f', kwargs.pop('format')]
+        format = str(kwargs.pop('format'))
+        args += ['-f', format]
     if 'video_bitrate' in kwargs:
-        args += ['-b:v', str(kwargs.pop('video_bitrate'))]
+        video_bitrate = str(kwargs.pop('video_bitrate'))
+        args += ['-b:v', video_bitrate]
     if 'audio_bitrate' in kwargs:
-        args += ['-b:a', str(kwargs.pop('audio_bitrate'))]
+        audio_bitrate = str(kwargs.pop('audio_bitrate'))
+        args += ['-b:a', audio_bitrate]
     if 'video_size' in kwargs:
         video_size = kwargs.pop('video_size')
-        if not isinstance(video_size, basestring) and isinstance(video_size, Iterable):
+        if not isinstance(video_size, str) and isinstance(video_size, Iterable):
             video_size = '{}x{}'.format(video_size[0], video_size[1])
         args += ['-video_size', video_size]
     args += convert_kwargs_to_cmd_line_args(kwargs)
@@ -149,24 +142,22 @@ def _get_output_args(node, stream_name_map):
 
 
 @output_operator()
-def get_args(stream_spec, overwrite_output=False):
+def get_args(stream_spec: OutputStream, overwrite_output: bool = False) -> list[str | int]:
     """Build command-line arguments to be passed to ffmpeg."""
     nodes = get_stream_spec_nodes(stream_spec)
-    args = []
+    args: list[str | int] = []
     # TODO: group nodes together, e.g. `-i somefile -r somerate`.
     sorted_nodes, outgoing_edge_maps = topo_sort(nodes)
     input_nodes = [node for node in sorted_nodes if isinstance(node, InputNode)]
     output_nodes = [node for node in sorted_nodes if isinstance(node, OutputNode)]
     global_nodes = [node for node in sorted_nodes if isinstance(node, GlobalNode)]
     filter_nodes = [node for node in sorted_nodes if isinstance(node, FilterNode)]
-    stream_name_map = {(node, None): str(i) for i, node in enumerate(input_nodes)}
+    stream_name_map: StreamNameMap = {(node, None): str(i) for i, node in enumerate(input_nodes)}
     filter_arg = _get_filter_arg(filter_nodes, outgoing_edge_maps, stream_name_map)
     args += reduce(operator.add, [_get_input_args(node) for node in input_nodes])
     if filter_arg:
         args += ['-filter_complex', filter_arg]
-    args += reduce(
-        operator.add, [_get_output_args(node, stream_name_map) for node in output_nodes]
-    )
+    args += reduce(operator.add, [_get_output_args(node, stream_name_map) for node in output_nodes])
     args += reduce(operator.add, [_get_global_args(node) for node in global_nodes], [])
     if overwrite_output:
         args += ['-y']
@@ -174,7 +165,7 @@ def get_args(stream_spec, overwrite_output=False):
 
 
 @output_operator()
-def compile(stream_spec, cmd='ffmpeg', overwrite_output=False):
+def compile(stream_spec: OutputStream, cmd: list[str] | str = 'ffmpeg', overwrite_output: bool = False) -> list[str]:
     """Build command-line for invoking ffmpeg.
 
     The :meth:`run` function uses this to build the command line
@@ -185,7 +176,7 @@ def compile(stream_spec, cmd='ffmpeg', overwrite_output=False):
     This is the same as calling :meth:`get_args` except that it also
     includes the ``ffmpeg`` command as the first argument.
     """
-    if isinstance(cmd, basestring):
+    if isinstance(cmd, str):
         cmd = [cmd]
     elif type(cmd) != list:
         cmd = list(cmd)
@@ -194,15 +185,15 @@ def compile(stream_spec, cmd='ffmpeg', overwrite_output=False):
 
 @output_operator()
 def run_async(
-    stream_spec,
-    cmd='ffmpeg',
-    pipe_stdin=False,
-    pipe_stdout=False,
-    pipe_stderr=False,
-    quiet=False,
-    overwrite_output=False,
-    cwd=None,
-):
+    stream_spec: OutputStream,
+    cmd: str | list[str] = 'ffmpeg',
+    pipe_stdin: bool = False,
+    pipe_stdout: bool = False,
+    pipe_stderr: bool = False,
+    quiet: bool = False,
+    overwrite_output: bool = False,
+    cwd: str | None = None,
+) -> subprocess.Popen[bytes]:
     """Asynchronously invoke ffmpeg for the supplied node graph.
 
     Args:
@@ -298,15 +289,15 @@ def run_async(
 
 @output_operator()
 def run(
-    stream_spec,
-    cmd='ffmpeg',
-    capture_stdout=False,
-    capture_stderr=False,
-    input=None,
-    quiet=False,
-    overwrite_output=False,
-    cwd=None,
-):
+    stream_spec: OutputStream,
+    cmd: str | list[str] = 'ffmpeg',
+    capture_stdout: bool = False,
+    capture_stderr: bool = False,
+    input: str | None = None,
+    quiet: bool = False,
+    overwrite_output: bool = False,
+    cwd: str | None = None,
+) -> tuple[str, str]:
     """Invoke ffmpeg for the supplied node graph.
 
     Args:

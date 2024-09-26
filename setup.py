@@ -1,10 +1,9 @@
-from setuptools import setup
 from textwrap import dedent
 
+from setuptools import setup
+
 version = '0.2.0'
-download_url = 'https://github.com/kkroening/ffmpeg-python/archive/v{}.zip'.format(
-    version
-)
+download_url = 'https://github.com/kkroening/ffmpeg-python/archive/v{}.zip'.format(version)
 
 long_description = dedent(
     '''\
